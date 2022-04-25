@@ -1,0 +1,72 @@
+version: '3.1'
+
+networks:
+  potatoes-net:
+    driver: bridge
+
+volumes:
+  moviedb:
+  reviewdb:
+
+services:
+#movies
+  moviedb:
+    image: mongo:5.0.7
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongouser
+      MONGO_INITDB_ROOT_PASSWORD: mongopwd
+    volumes:
+      - moviedb:/data/db
+    networks:
+      - potatoes-net
+  movie:
+    image: rogeriostos/movies:v1
+    restart: always
+    environment:
+      MONGODB_URI: mongodb://mongouser:mongopwd@moviedb:27017/admin
+    volumes:
+      - moviedb:/data/db
+    depends_on:
+      - moviedb
+    networks:
+      - potatoes-net
+ #review
+  reviewdb:
+    image: postgres:14.2
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: "Pg@123"
+      POSTGRES_USER: "pguser"
+      POSTGRES_DB: "pguser"
+    volumes:
+      - reviewdb:/var/lib/postgresql/data
+    networks:
+      - potatoes-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pguser"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  review:
+    image: rogeriostos/review:v1
+    restart: always
+    networks:
+      - potatoes-net
+    depends_on:
+      - reviewdb
+    environment:
+      ConnectionStrings__MyConnection: "Host=reviewdb;Database=pguser;Username=pguser;Password=Pg@123;"
+  #app
+  app:
+    image: rogeriostos/rotten-potatoes-ms:v1
+    ports:
+      - 80:5000
+    networks:
+      - potatoes-net
+    depends_on:
+      - movie
+      - review
+    environment:
+      MOVIE_SERVICE_URI: http://movie:8181
+      REVIEW_SERVICE_URI: http://review:80
